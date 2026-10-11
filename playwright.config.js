@@ -16,7 +16,7 @@ module.exports = defineConfig({
 
     use: {
         baseURL: environment.baseURL,
-        headless: false,
+        headless: true,
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
     },
