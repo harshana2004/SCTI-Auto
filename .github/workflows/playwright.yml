@@ -29,28 +29,26 @@ jobs:
       - name: Validate Playwright test discovery
         run: npx playwright test --list
 
-      - name: Install browser engines
-        run: npx playwright install --with-deps chromium firefox webkit
-
-      - name: Clear previous test results
-        run: rm -rf allure-results allure-report test-results
-
   smoke:
     name: Smoke tests - 3 browsers
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run smoke tests
         run: |
@@ -59,22 +57,36 @@ jobs:
             --project=firefox \
             --project=webkit
 
+      - name: Upload smoke Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-smoke
+          path: allure-results/
+          if-no-files-found: warn
+          retention-days: 14
+
   regression:
     name: Regression tests - 3 browsers
     needs: smoke
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run regression tests
         run: |
@@ -83,32 +95,90 @@ jobs:
             --project=firefox \
             --project=webkit
 
+      - name: Upload regression Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-regression
+          path: allure-results/
+          if-no-files-found: warn
+          retention-days: 14
+
   responsive-regression:
     name: Responsive regression tests
     needs: regression
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npx playwright install --with-deps chromium
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Run responsive regression tests
         run: npm run test:responsive -- --project=chromium
 
+      - name: Upload responsive Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-responsive
+          path: allure-results/
+          if-no-files-found: warn
+          retention-days: 14
+
   report:
-    name: Publish test artifacts
-    needs: [smoke, regression, responsive-regression]
+    name: Generate combined Allure report
+    needs: [build, smoke, regression, responsive-regression]
     if: always()
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download available test artifacts
-        run: echo "Configure artifact downloads when test jobs upload their results."
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all Allure results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results
+          merge-multiple: true
+
+      - name: Verify Allure results exist
+        run: |
+          if ! find allure-results -type f -name '*-result.json' -print -quit | grep -q .; then
+            echo "No Allure test result files were downloaded."
+            exit 1
+          fi
+
+      - name: Generate combined Allure HTML report
+        run: npm run report:generate
+
+      - name: Upload single combined Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scti-combined-allure-report
+          path: allure-report/
+          if-no-files-found: error
+          retention-days: 14
