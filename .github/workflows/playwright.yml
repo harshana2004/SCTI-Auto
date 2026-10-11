@@ -120,9 +120,6 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
@@ -164,12 +161,23 @@ jobs:
           path: allure-results
           merge-multiple: true
 
+      - name: Inspect downloaded Allure results
+        if: always()
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Allure results directory:"
+          ls -la allure-results || true
+          echo "Downloaded files:"
+          find allure-results -type f -print || true
+
       - name: Verify Allure results exist
         run: |
           if ! find allure-results -type f -name '*-result.json' -print -quit | grep -q .; then
-            echo "No Allure test result files were downloaded."
+            echo "No Allure test result JSON files were found."
             exit 1
           fi
+          echo "Allure test result files found successfully."
 
       - name: Generate combined Allure HTML report
         run: npm run report:generate
